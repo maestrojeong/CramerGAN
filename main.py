@@ -5,7 +5,7 @@ Updated on 2017.07.29
 Author : Yeonwoo Jeong
 '''
 from ops import mnist_for_gan, optimizer, clip, get_shape, softmax_cross_entropy, sigmoid_cross_entropy
-from config import CramerGANConfig, SAVE_DIR, PICTURE_DIR
+from config import CramerGganConfig, SAVE_DIR, PICTURE_DIR
 from utils import show_gray_image_3d, make_gif, create_dir
 from nets import GenConv, DisConv, Critic
 from tqdm import tqdm
@@ -24,7 +24,7 @@ logger.setLevel(logging.DEBUG)
 def sample_z(z_size, z_dim):
     return np.random.uniform(low=-1, high=1, size= [z_size, z_dim])
 
-class InfoGAN(CramerGANConfig):
+class CramerGan(CramerGanConfig):
     def __init__(self):
         CramerGANConfig.__init__(self)
         logger.info("Building model starts...")
@@ -63,6 +63,9 @@ class InfoGAN(CramerGANConfig):
         self.G_optimizer = optimizer(self.G_loss, self.generator.vars)
 
         logger.info("Building model done.")
+
+        self.z_sample1_fix = sample_z(self.batch_size, self.z_dim)
+
         self.sess = tf.Session()
         
     def initialize(self):
@@ -77,15 +80,22 @@ class InfoGAN(CramerGANConfig):
         saver.restore(self.sess, tf.train.latest_checkpoint(SAVE_DIR))
         logger.info("Restoring model done.")     
     
-    def sample_data(self):
+    def sample_data(self, fix = False):
         """sampling for data
+        Args:
+            fix - bool
+                defaults to be false
+                Whether z_fix or not
         Return:
             X_sample, z1_sample, z2_sample 
         """
         X_sample = self.dataset(self.batch_size)
-        z_sample1 = sample_z(self.batch_size, self.z_dim)
-        z_sample2 = sample_z(self.batch_size, self.z_dim)
-        return X_sample, z_sample1, z_sample2
+        if fix:
+            return X_sample, self.z_sample1_fix, self.z_sample1_fix
+        else:
+            z_sample1 = sample_z(self.batch_size, self.z_dim)
+            z_sample2 = sample_z(self.batch_size, self.z_dim)
+            return X_sample, z_sample1, z_sample2
 
     def train(self, train_epochs):
         count = 0
@@ -102,26 +112,22 @@ class InfoGAN(CramerGANConfig):
                 X_sample, z_sample1, z_sample2 = self.sample_data()
                 self.sess.run(self.G_optimizer, feed_dict = {self.X : X_sample, self.Z1 : z_sample1, self.Z2 : z_sample2})
             
-            for _ in range(0):
-                X_sample, z_sample1, z_sample2 = self.sample_data()
-                self.sess.run(self.Q_optimizer, feed_dict = {self.Z1 : z_sample1, self.Z2 : z_sample2})
 
             if epoch % self.log_every == self.log_every-1:
-                X_sample, z_sample1, z_sample2 = self.sample_data()
+                X_sample, z_sample1, z_sample2 = self.sample_data(fix=True)
                 D_loss = self.sess.run(self.D_loss, feed_dict = {self.X : X_sample, self.Z1 : z_sample1, self.Z2 : z_sample2})
                 G_loss = self.sess.run(self.G_loss, feed_dict = {self.X : X_sample, self.Z1 : z_sample1, self.Z2 : z_sample2})
-                
-                count+=1
-                for index in range(2):
-                    X_sample, z_sample1, z_sample2 = self.sample_data()
-                    gray_3d = self.sess.run(self.G_sample1, feed_dict = {self.Z1 : z_sample1}) # self.batch_size x 28 x 28 x 1
-                    gray_3d = np.squeeze(gray_3d)#self.batch_size x 28 x 28
-                	# Store generated image on PICTURE_DIR
-                    fig = show_gray_image_3d(gray_3d, col=10, figsize = (50, 50), dataformat = 'CHW')
-                    fig.savefig(PICTURE_DIR+"%s_%d.png"%(str(count).zfill(3), index))
-                    plt.close(fig)
-
                 logger.info("Epoch({}/{}) D_loss : {}, G_loss : {}".format(epoch+1, train_epochs, D_loss, G_loss))
+                
+                # Save picture
+                count+=1
+                gray_3d = self.sess.run(self.G_sample1, feed_dict = {self.Z1 : z_sample1}) # self.batch_size x 28 x 28 x 1
+                gray_3d = np.squeeze(gray_3d)#self.batch_size x 28 x 28
+            	# Store generated image on PICTURE_DIR
+                fig = show_gray_image_3d(gray_3d, col=10, figsize = (50, 50), dataformat = 'CHW')
+                fig.savefig(PICTURE_DIR+"%s_%d.png"%(str(count).zfill(3), index))
+                plt.close(fig)
+
                 # Save model
                 saver=tf.train.Saver(max_to_keep = 10)
                 saver.save(self.sess, os.path.join(SAVE_DIR, 'model'), global_step = epoch+1)
@@ -131,11 +137,10 @@ class InfoGAN(CramerGANConfig):
 if __name__=='__main__':
     create_dir(SAVE_DIR)
     create_dir(PICTURE_DIR)
-    infogan = InfoGAN()
-    infogan.initialize()
-    infogan.train(100000)
+    cramergan = CramerGan()
+    cramergan.initialize()
+    cramergan.train(100000)
 
-    for index in range(2):
-        images_path = glob.glob(os.path.join(PICTURE_DIR, '*_%d.png'%index))
-        gif_path = os.path.join(PICTURE_DIR, '%d.gif'%index)
-        make_gif(sorted(images_path), gif_path)
+    images_path = glob.glob(os.path.join(PICTURE_DIR, '*.png'))
+    gif_path = os.path.join(PICTURE_DIR, 'Movie.gif')
+    make_gif(sorted(images_path), gif_path)

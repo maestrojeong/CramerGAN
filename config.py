@@ -1,7 +1,7 @@
 '''
 Basic operation not based on tensorflow
 
-Updated on 2017.07.21
+Updated on 2017.07.31
 Author : Yeonwoo Jeong
 '''
 
@@ -12,7 +12,7 @@ MNIST_PATH =  "../MNIST_data"
 PICTURE_DIR = './asset/'
 
 #===========================================InfoGAN configuraion===========================================#
-class CramerGANConfig(object):
+class CramerGanConfig(object):
     def __init__(self):
         self.x_channel = 1
         self.x_size = 28
